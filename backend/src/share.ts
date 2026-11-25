@@ -3,8 +3,12 @@
 import { Marked } from "marked";
 import { bucket, cleanPath, encodePath, sameSecret } from "./b2.ts";
 
-/** One share link. `path` "" = the whole vault; `code` "" = anyone with the link can open it. */
-type Share = { vault: string; path: string; edit: boolean; code: string };
+/** One share link. `path` "" = the whole vault; `code` "" = anyone with the link can open it;
+ *  `expires` = unix seconds when the link stops working, 0 = never. */
+type Share = { vault: string; path: string; edit: boolean; code: string; expires: number };
+
+/** True once a link's expiry time has passed (KV deletes it too, but only eventually). */
+const expired = (s: Share) => !!s.expires && s.expires * 1000 <= Date.now();
 
 const kvKey = (id: string) => `share:${id}`;
 const ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"; // 64: no modulo bias
@@ -20,12 +24,22 @@ export async function shares(request: Request, env: Env, url: URL): Promise<Resp
 		const b = await request.json<Record<string, unknown>>().catch(() => null);
 		const vault = typeof b?.vault === "string" && !b.vault.includes("/") ? cleanPath(b.vault) : null;
 		const path = typeof b?.path === "string" ? b.path : null;
+		// seconds until the link expires; 0 or missing = never. KV's minimum TTL is 60s.
+		const ttl = b?.expires_in ?? 0;
 		if (!b || !vault || path === null || (path !== "" && !cleanPath(path))) return new Response("bad share", { status: 400 });
-		const share: Share = { vault, path, edit: b.edit === true, code: b.code === true ? random(8, CODE_CHARS) : "" };
+		if (typeof ttl !== "number" || !Number.isSafeInteger(ttl) || (ttl !== 0 && ttl < 60))
+			return new Response("expires_in must be 0 or at least 60 seconds", { status: 400 });
+		const share: Share = {
+			vault,
+			path,
+			edit: b.edit === true,
+			code: b.code === true ? random(8, CODE_CHARS) : "",
+			expires: ttl ? Math.floor(Date.now() / 1000) + ttl : 0,
+		};
 		// the record lives in KV metadata (returned by list), which is capped at 1024 bytes
 		if (new TextEncoder().encode(JSON.stringify(share)).length > 1000) return new Response("path too long", { status: 400 });
 		const id = random(22, ID_CHARS);
-		await env.SHARES.put(kvKey(id), "", { metadata: share });
+		await env.SHARES.put(kvKey(id), "", ttl ? { metadata: share, expirationTtl: ttl } : { metadata: share });
 		return Response.json({ id, ...share }, { status: 201 });
 	}
 	if (url.pathname === "/shares" && request.method === "GET") {
@@ -35,7 +49,7 @@ export async function shares(request: Request, env: Env, url: URL): Promise<Resp
 		do {
 			const page = await env.SHARES.list<Share>({ prefix: "share:", cursor });
 			for (const k of page.keys)
-				if (k.metadata && (!vault || k.metadata.vault === vault)) out.push({ id: k.name.slice("share:".length), ...k.metadata });
+				if (k.metadata && !expired(k.metadata) && (!vault || k.metadata.vault === vault)) out.push({ id: k.name.slice("share:".length), ...k.metadata });
 			cursor = page.list_complete ? undefined : page.cursor;
 		} while (cursor);
 		return Response.json(out);
@@ -59,6 +73,7 @@ export async function viewer(request: Request, env: Env, url: URL): Promise<Resp
 	}
 	const share = id ? (await env.SHARES.getWithMetadata<Share>(kvKey(id))).metadata : null;
 	if (!share) return page(404, "Link not found", "", "", `<p class="muted">This share link doesn't exist or was turned off.</p>`);
+	if (expired(share)) return page(410, "Link expired", "", "", `<p class="muted">This share link has expired.</p>`);
 	if (Number(request.headers.get("content-length")) > 5_000_000) return new Response("too large", { status: 413 });
 	const form = request.method === "POST" ? await request.formData() : null;
 

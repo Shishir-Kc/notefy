@@ -8,6 +8,15 @@ use crate::{
 };
 use eframe::egui::{self, Margin, RichText, Stroke};
 
+/// Choices for a link's lifetime: label and seconds per unit (0 = never).
+const EXPIRY_UNITS: [(&str, u64); 5] = [
+    ("Never", 0),
+    ("Minutes", 60),
+    ("Hours", 3600),
+    ("Days", 86_400),
+    ("Weeks", 604_800),
+];
+
 /// State of the open Share dialog.
 #[derive(Default)]
 pub(crate) struct ShareDialog {
@@ -17,6 +26,9 @@ pub(crate) struct ShareDialog {
     code: bool,
     /// Visitors may edit (read-only otherwise).
     edit: bool,
+    /// Index into `EXPIRY_UNITS` (0 = never expires) and how many of that unit.
+    expiry_unit: usize,
+    expiry_amount: u32,
     /// This vault's links as last listed by the backend (`None` = still loading).
     links: Option<Vec<ShareInfo>>,
     /// A create/delete request is on its way.
@@ -43,6 +55,7 @@ impl Notefy {
     pub(crate) fn open_share(&mut self) {
         self.share = Some(ShareDialog {
             whole_vault: self.current.is_none(),
+            expiry_amount: 1,
             ..Default::default()
         });
         self.cloud(Job::ListShares {
@@ -201,6 +214,25 @@ impl Notefy {
                             .size(12.0)
                             .color(p.muted),
                     );
+                    ui.add_space(8.0);
+                    section(ui, "EXPIRES");
+                    ui.horizontal(|ui| {
+                        let never = d.expiry_unit == 0;
+                        ui.add_enabled(
+                            !never,
+                            egui::DragValue::new(&mut d.expiry_amount).range(1..=999).speed(0.2),
+                        );
+                        egui::ComboBox::from_id_salt("share-expiry")
+                            .selected_text(if never { "Never" } else { EXPIRY_UNITS[d.expiry_unit].0 })
+                            .show_ui(ui, |ui| {
+                                for (i, (label, _)) in EXPIRY_UNITS.iter().enumerate() {
+                                    ui.selectable_value(&mut d.expiry_unit, i, *label);
+                                }
+                            });
+                        if !never {
+                            ui.label(RichText::new("after creating the link").size(12.5).color(p.muted));
+                        }
+                    });
                     ui.add_space(12.0);
                     // `horizontal` keeps the row one line high: a bare right-to-left layout in a
                     // modal takes all the remaining height and pushes the dialog off-screen
@@ -218,7 +250,9 @@ impl Notefy {
                             };
                             let who = if d.code { "access code" } else { "anyone with the link" };
                             let perm = if d.edit { "can edit" } else { "read only" };
-                            ui.add(egui::Label::new(RichText::new(format!("{what}  ·  {who}  ·  {perm}")).size(12.5).color(p.muted)).truncate());
+                            let secs = expiry_secs(d.expiry_unit, d.expiry_amount);
+                            let ends = if secs == 0 { "no expiry".into() } else { format!("expires in {}", human(secs)) };
+                            ui.add(egui::Label::new(RichText::new(format!("{what}  ·  {who}  ·  {perm}  ·  {ends}")).size(12.5).color(p.muted)).truncate());
                         });
                     });
 
@@ -268,6 +302,7 @@ impl Notefy {
                 path,
                 edit: d.edit,
                 code: d.code,
+                expires_in: expiry_secs(d.expiry_unit, d.expiry_amount),
             };
             self.save(); // upload what's on screen
             self.cloud(job);
@@ -317,12 +352,64 @@ fn share_row(ui: &mut egui::Ui, p: &Palette, s: &ShareInfo, stop: &mut Option<St
         (true, false) => "Code required · can edit",
         (false, false) => "Code required · read only",
     };
-    ui.label(RichText::new(access).size(12.0).color(p.muted));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let ends = match s.expires {
+        0 => String::new(),
+        t if t <= now => " · expired".into(),
+        t => format!(" · expires in {}", human(t - now)),
+    };
+    ui.label(
+        RichText::new(format!("{access}{ends}"))
+            .size(12.0)
+            .color(p.muted),
+    );
     ui.add_space(4.0);
+}
+
+/// Link lifetime in seconds for the dialog's choice (0 = never).
+fn expiry_secs(unit: usize, amount: u32) -> u64 {
+    EXPIRY_UNITS[unit].1 * u64::from(amount.max(1))
+}
+
+/// Rough duration for people: the two largest units, e.g. "2d 3h", "45m", "under a minute".
+fn human(secs: u64) -> String {
+    let parts: Vec<String> = [(604_800, "w"), (86_400, "d"), (3600, "h"), (60, "m")]
+        .iter()
+        .scan(secs, |left, &(n, u)| {
+            let k = *left / n;
+            *left %= n;
+            Some((k > 0).then(|| format!("{k}{u}")))
+        })
+        .flatten()
+        .take(2)
+        .collect();
+    if parts.is_empty() {
+        "under a minute".into()
+    } else {
+        parts.join(" ")
+    }
 }
 
 fn cloud_config_path() -> String {
     crate::config::config_file(cloud::CONFIG)
         .display()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expiry_choices_and_labels() {
+        assert_eq!(expiry_secs(0, 5), 0); // never
+        assert_eq!(expiry_secs(1, 0), 60); // amount is at least 1 (KV minimum is 60s)
+        assert_eq!(expiry_secs(4, 2), 2 * 604_800);
+        assert_eq!(human(45 * 60), "45m");
+        assert_eq!(human(2 * 86_400 + 3 * 3600 + 59), "2d 3h");
+        assert_eq!(human(604_800 + 60), "1w 1m");
+        assert_eq!(human(30), "under a minute");
+    }
 }

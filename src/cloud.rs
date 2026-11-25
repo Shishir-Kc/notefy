@@ -21,6 +21,8 @@ pub(crate) struct ShareInfo {
     /// Shared file relative to the vault (`/`-separated), or "" for the whole vault.
     pub(crate) path: String,
     pub(crate) edit: bool,
+    /// Unix seconds when the link stops working (0 = never).
+    pub(crate) expires: u64,
     /// Access code ("" = anyone with the link).
     pub(crate) code: String,
     pub(crate) url: String,
@@ -48,6 +50,8 @@ pub(crate) enum Job {
         path: Option<PathBuf>,
         edit: bool,
         code: bool,
+        /// Seconds until the link expires (0 = never).
+        expires_in: u64,
     },
     ListShares {
         vault: PathBuf,
@@ -148,6 +152,7 @@ impl Api {
                 path,
                 edit,
                 code,
+                expires_in,
             } => {
                 // shortcut: re-uploads every file on each vault share; compare times first if vaults get big
                 let files = path
@@ -162,7 +167,7 @@ impl Api {
                     None => String::new(),
                 };
                 let body = serde_json::json!({
-                    "vault": vault_name(&vault), "path": rel, "edit": edit, "code": code,
+                    "vault": vault_name(&vault), "path": rel, "edit": edit, "code": code, "expires_in": expires_in,
                 });
                 let mut r = self.call_body(
                     self.agent
@@ -263,6 +268,7 @@ impl Api {
             path: v["path"].as_str()?.into(),
             edit: v["edit"].as_bool()?,
             code: v["code"].as_str()?.into(),
+            expires: v["expires"].as_u64().unwrap_or(0),
             id,
         })
     }
