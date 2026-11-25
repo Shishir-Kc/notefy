@@ -179,6 +179,7 @@ impl Notefy {
                     } else {
                         &mut self.buffer
                     };
+                    let before = egui::text_edit::TextEditState::load(ui.ctx(), id);
                     let out = egui::TextEdit::multiline(text)
                         .id(id)
                         .frame(egui::Frame::NONE)
@@ -190,8 +191,46 @@ impl Notefy {
                     if !tables.is_empty() {
                         draw_table_grids(ui, &out, &tables, p.border);
                     }
-                    draw_checkboxes(ui, &out, &self.buffer, &reveal, &theme, p.bg);
+                    let boxes = draw_checkboxes(ui, &out, &self.buffer, &reveal, &theme, p.bg);
                     let r = &out.response.response;
+                    // clicking a checkbox ticks it; the cursor stays put so the line stays rendered
+                    let on_box = |pos: Option<egui::Pos2>| {
+                        pos.and_then(|pos| boxes.iter().find(|(b, _)| b.contains(pos)))
+                    };
+                    if on_box(r.hover_pos()).is_some() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                    // toggle on press: TextEdit moves the cursor on press, which would reveal
+                    // the raw line, so keep restoring the old cursor until the button is up
+                    let (pressed, btn_down, press_pos) = ui.input(|i| {
+                        (
+                            i.pointer.primary_pressed(),
+                            i.pointer.any_down(),
+                            i.pointer.press_origin(),
+                        )
+                    });
+                    if let Some(st) = &self.check_hold {
+                        st.clone().store(ui.ctx(), id);
+                        if !btn_down {
+                            self.check_hold = None;
+                        }
+                    } else if pressed
+                        && r.hovered()
+                        && let Some(&(_, ch)) = on_box(press_pos)
+                    {
+                        let at = char_to_byte(&self.buffer, ch + 3);
+                        let mark = if &self.buffer[at..at + 1] == " " {
+                            "x"
+                        } else {
+                            " "
+                        };
+                        self.buffer.replace_range(at..at + 1, mark);
+                        self.dirty = true;
+                        self.last_edit = Instant::now();
+                        let st = before.unwrap_or_default();
+                        st.clone().store(ui.ctx(), id);
+                        self.check_hold = Some(st);
+                    }
                     if r.changed() {
                         self.dirty = true;
                         self.last_edit = Instant::now();
@@ -611,6 +650,7 @@ fn draw_table_grids(
 }
 
 /// Checkboxes in the gap `live::layout` leaves before hidden `- [ ]` markers.
+/// Returns each box with the char offset of its `-`, for click-to-toggle.
 fn draw_checkboxes(
     ui: &egui::Ui,
     out: &egui::text_edit::TextEditOutput,
@@ -618,8 +658,9 @@ fn draw_checkboxes(
     reveal: &Option<std::ops::RangeInclusive<usize>>,
     th: &live::Theme,
     bg: Color32,
-) {
+) -> Vec<(egui::Rect, usize)> {
     let painter = ui.painter();
+    let mut boxes = vec![];
     for (line, ch, done) in live::tasks(src) {
         if reveal.as_ref().is_some_and(|r| r.contains(&line)) {
             continue;
@@ -646,7 +687,9 @@ fn draw_checkboxes(
         } else {
             painter.rect_stroke(b, 3.0, Stroke::new(1.5, th.muted), egui::StrokeKind::Inside);
         }
+        boxes.push((b.expand(3.0), ch));
     }
+    boxes
 }
 
 pub(crate) fn char_to_byte(s: &str, c: usize) -> usize {

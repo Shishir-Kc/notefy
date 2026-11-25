@@ -68,6 +68,8 @@ pub(crate) struct Notefy {
     index_at: Option<Instant>,
     /// Wikilink clicked in the editor, opened in a new tab after the frame.
     pending_link: Option<String>,
+    /// Editor cursor to keep restoring while a checkbox click is held (see `editor()`).
+    check_hold: Option<egui::text_edit::TextEditState>,
     /// `[[` suggestion popup in the editor.
     link: LinkPopup,
     /// Ctrl+click preview of a linked note.
@@ -162,6 +164,7 @@ impl Notefy {
             new_folder: None,
             pending_delete: None,
             pending_link: None,
+            check_hold: None,
             link: LinkPopup::default(),
             preview: None,
             search: SearchState {
