@@ -8,6 +8,10 @@
 		"logs": { "enabled": true, "head_sampling_rate": 1 },
 		"traces": { "enabled": true, "head_sampling_rate": 0.01 }
 	},
+	// The share viewer uses the app's bundled fonts, served as static files (e.g. /JetBrainsMonoNerdFont-Regular.ttf).
+	"assets": { "directory": "../assets" },
+	// Share-link records. Wrangler creates the namespace on first deploy.
+	"kv_namespaces": [{ "binding": "SHARES" }],
 	// Fill these in. Secrets (B2_KEY_ID, B2_APP_KEY, API_TOKEN) go in via `npx wrangler secret put`, see .dev.vars.example.
 	"vars": {
 		"B2_ENDPOINT": "https://s3.us-west-004.backblazeb2.com",

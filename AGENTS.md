@@ -29,7 +29,7 @@ cargo clippy           # keep it warning-free
 | `src/vault.rs` | Disk side: `scan_dir` (tree + note list), `move_path`, `search_notes`. No UI. |
 | `src/semantic.rs` | Meaning-based search: EmbeddingGemma (via `fastembed`) on a worker thread, index saved to `<vault>/.notefy/embeddings.bin`. No UI. |
 | `src/theme.rs` | Palette (`DARK`: `bg` page, `panel` sidebar/tab strip, `surface` hover), egui style, bundled fonts, `icon::*` (Codicons from the Nerd Font). |
-| `backend/` | Cloudflare Worker (TypeScript) storing vault files in Backblaze B2 at `<vault>/<path>`; routes in `src/index.ts` header. `npm test`, `npm run check`, `npm run deploy`. |
+| `backend/` | Cloudflare Worker (TypeScript): vault files in Backblaze B2 at `<vault>/<path>` (`b2.ts`), share links in KV + the public viewer, server-rendered with no scripts (`share.ts`); routes in the `index.ts` header. `npm test`, `npm run check`, `npm run deploy`. |
 | `src/config.rs` | Tiny files in `$XDG_CONFIG_HOME/notefy/` (vault path, recent searches, bookmarks, flags). |
 
 UI submodules each add `impl Notefy { ... }` blocks, so all state is `self.<field>`.
