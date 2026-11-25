@@ -197,7 +197,21 @@ pub fn layout(
                 background: th.code_bg,
                 ..base.clone()
             };
-            w.push(line, f.clone());
+            if w.show {
+                w.push(line, f.clone());
+            } else {
+                // hide the backticks, keep the language as a small label
+                let ticks = line.len() - line.trim_start().len() + 3;
+                w.push(
+                    &line[..ticks],
+                    TextFormat {
+                        color: Color32::TRANSPARENT,
+                        font_id: FontId::proportional(0.5),
+                        ..f.clone()
+                    },
+                );
+                w.push(&line[ticks..], f.clone());
+            }
             w.push(nl, f);
             continue;
         }
@@ -238,12 +252,14 @@ pub fn layout(
             if w.show {
                 w.push(&body[..marker_len], bar);
             } else {
-                // keep the '>' visible as a quote bar
+                // draw the '>' as a solid quote bar
                 w.push(
                     &body[..1],
                     TextFormat {
-                        font_id: FontId::new(th.size, bold_family()),
-                        ..bar
+                        font_id: FontId::proportional(th.size * 0.3),
+                        color: Color32::TRANSPARENT,
+                        background: th.link,
+                        ..base.clone()
                     },
                 );
                 w.push(&body[1..marker_len], base.clone());
