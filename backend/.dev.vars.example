@@ -1,0 +1,4 @@
+# Copy to .dev.vars for `npm run dev`; in production set each with `npx wrangler secret put <NAME>`.
+B2_KEY_ID=
+B2_APP_KEY=
+API_TOKEN=

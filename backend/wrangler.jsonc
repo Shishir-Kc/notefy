@@ -1,0 +1,16 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "notefy-backend",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-11-25",
+	"observability": {
+		"enabled": true,
+		"logs": { "enabled": true, "head_sampling_rate": 1 },
+		"traces": { "enabled": true, "head_sampling_rate": 0.01 }
+	},
+	// Fill these in. Secrets (B2_KEY_ID, B2_APP_KEY, API_TOKEN) go in via `npx wrangler secret put`, see .dev.vars.example.
+	"vars": {
+		"B2_ENDPOINT": "https://s3.us-west-004.backblazeb2.com",
+		"B2_BUCKET": "notefy"
+	}
+}
