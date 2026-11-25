@@ -1,0 +1,10 @@
+[package]
+name = "notefy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.37.0"
+# only the text-embedding parts; fancy-regex keeps the tokenizer pure Rust
+fastembed = { version = "7.8.0", default-features = false, features = ["onnx", "ort-download-binaries-native-tls", "hf-hub-native-tls", "fancy-regex"] }
+rfd = "0.18.0"
