@@ -20,6 +20,33 @@ pub struct Theme {
     pub char_w: f32,
 }
 
+/// Width of the painted task checkbox gap, in font sizes.
+pub const TASK_W: f32 = 1.4;
+
+/// Task list items (`- [ ] `, `- [x] `) outside code blocks:
+/// (line index, char offset of the `-`, done).
+pub fn tasks(src: &str) -> Vec<(usize, usize, bool)> {
+    let (mut out, mut in_code, mut chars) = (vec![], false, 0);
+    for (idx, line) in src.split_inclusive('\n').enumerate() {
+        let body = line.trim_start();
+        if body.starts_with("```") {
+            in_code = !in_code;
+        } else if !in_code
+            && let Some(k) = ["- [ ] ", "- [x] ", "- [X] "]
+                .iter()
+                .position(|p| body.starts_with(p))
+        {
+            out.push((
+                idx,
+                chars + line.chars().count() - body.chars().count(),
+                k > 0,
+            ));
+        }
+        chars += line.chars().count();
+    }
+    out
+}
+
 /// Horizontal padding inside a table cell.
 const PAD: f32 = 10.0;
 
@@ -187,7 +214,21 @@ pub fn layout(
                 background: th.code_bg,
                 ..base.clone()
             };
-            w.push(line, f.clone());
+            if w.show {
+                w.push(line, f.clone());
+            } else {
+                // hide the backticks, keep the language as a small label
+                let ticks = line.len() - line.trim_start().len() + 3;
+                w.push(
+                    &line[..ticks],
+                    TextFormat {
+                        color: Color32::TRANSPARENT,
+                        font_id: FontId::proportional(0.5),
+                        ..f.clone()
+                    },
+                );
+                w.push(&line[ticks..], f.clone());
+            }
             w.push(nl, f);
             continue;
         }
@@ -290,7 +331,13 @@ pub fn layout(
         };
         for (pre, done) in [("- [ ] ", false), ("- [x] ", true), ("- [X] ", true)] {
             if let Some(rest) = body.strip_prefix(pre) {
-                w.push(pre, bullet.clone());
+                if w.show {
+                    w.push(pre, bullet.clone());
+                } else {
+                    // hide "- [x]" behind a gap where the editor paints a checkbox (`tasks`)
+                    w.job.append(&pre[..5], th.size * TASK_W, hidden.clone());
+                    w.push(&pre[5..], base.clone());
+                }
                 let f = if done {
                     TextFormat {
                         color: th.muted,
@@ -642,6 +689,12 @@ mod tests {
                 .iter()
                 .all(|s| s.format.color != Color32::TRANSPARENT)
         );
+    }
+
+    #[test]
+    fn finds_tasks() {
+        let src = "é\n  - [ ] a\n```\n- [x] code\n```\n- [X] b";
+        assert_eq!(tasks(src), vec![(1, 4, false), (5, 31, true)]);
     }
 
     #[test]

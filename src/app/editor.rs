@@ -190,6 +190,7 @@ impl Notefy {
                     if !tables.is_empty() {
                         draw_table_grids(ui, &out, &tables, p.border);
                     }
+                    draw_checkboxes(ui, &out, &self.buffer, &reveal, &theme, p.bg);
                     let r = &out.response.response;
                     if r.changed() {
                         self.dirty = true;
@@ -605,6 +606,45 @@ fn draw_table_grids(
             if let Some(r) = lines.get(l) {
                 painter.hline(span.clone(), r.bottom(), stroke);
             }
+        }
+    }
+}
+
+/// Checkboxes in the gap `live::layout` leaves before hidden `- [ ]` markers.
+fn draw_checkboxes(
+    ui: &egui::Ui,
+    out: &egui::text_edit::TextEditOutput,
+    src: &str,
+    reveal: &Option<std::ops::RangeInclusive<usize>>,
+    th: &live::Theme,
+    bg: Color32,
+) {
+    let painter = ui.painter();
+    for (line, ch, done) in live::tasks(src) {
+        if reveal.as_ref().is_some_and(|r| r.contains(&line)) {
+            continue;
+        }
+        // the hidden '-' sits right after the gap
+        let at = out
+            .galley
+            .pos_from_cursor(egui::text::CCursor::new(ch))
+            .translate(out.galley_pos.to_vec2());
+        let s = th.size * 0.85;
+        let gap = th.size * live::TASK_W;
+        let b = egui::Rect::from_center_size(
+            egui::pos2(at.left() - gap + s / 2.0 + 1.0, at.center().y),
+            egui::vec2(s, s),
+        );
+        if done {
+            painter.rect_filled(b, 3.0, th.link);
+            let pts = [
+                b.lerp_inside(egui::vec2(0.22, 0.52)),
+                b.lerp_inside(egui::vec2(0.42, 0.72)),
+                b.lerp_inside(egui::vec2(0.78, 0.30)),
+            ];
+            painter.line(pts.to_vec(), Stroke::new(2.0, bg));
+        } else {
+            painter.rect_stroke(b, 3.0, Stroke::new(1.5, th.muted), egui::StrokeKind::Inside);
         }
     }
 }
