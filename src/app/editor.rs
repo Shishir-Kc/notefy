@@ -474,6 +474,7 @@ impl Notefy {
             }
             dest
         };
+        self.cloud_push(&target);
         let rel = relative_path(note.parent().unwrap_or(&self.vault), &target);
         let rel = rel.to_string_lossy().replace('\\', "/");
         let alt = target

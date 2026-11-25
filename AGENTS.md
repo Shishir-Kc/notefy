@@ -23,10 +23,12 @@ cargo clippy           # keep it warning-free
 | `src/app/header.rs` | Browser-style tab strip; nav bar (back/forward, breadcrumb, reading-mode and bookmark toggles, ⋯ menu with Insert image/table and Delete). |
 | `src/app/sidebar.rs` | View switcher (files/search/bookmarks), tree toolbar, file tree with drag-and-drop, bookmarks list, vault switcher. |
 | `src/app/graph.rs` | Graph view of `[[links]]` (force layout, pan/zoom, click to open), drawn in place of the editor. |
+| `src/app/share.rs` | Share dialog (note or whole vault, link or access code, read-only or editable) and applying cloud events, incl. web edits (taken if our copy is unchanged, else saved as `<name> (web edit).md`). |
 | `src/app/dialogs.rs` | Ctrl+Space search modal, delete confirmation, "New folder" prompt. |
 | `src/app/widgets.rs` | Shared widgets: `icon_button`, `truncated` labels. |
 | `src/live.rs` | Markdown → styled `LayoutJob` (no egui widgets), link detection (`link_at`, `link_query`). Pure functions, well tested. |
 | `src/vault.rs` | Disk side: `scan_dir` (tree + note list), `move_path`, `search_notes`. No UI. |
+| `src/cloud.rs` | Worker thread talking to `backend/`: uploads on save/rename/move/delete, pulls web edits on open, share-link API. Off unless `~/.config/notefy/cloud` (URL, token) exists. No UI. |
 | `src/semantic.rs` | Meaning-based search: EmbeddingGemma (via `fastembed`) on a worker thread, index saved to `<vault>/.notefy/embeddings.bin`. No UI. |
 | `src/theme.rs` | Palette (`DARK`: `bg` page, `panel` sidebar/tab strip, `surface` hover), egui style, bundled fonts, `icon::*` (Codicons from the Nerd Font). |
 | `backend/` | Cloudflare Worker (TypeScript): vault files in Backblaze B2 at `<vault>/<path>` (`b2.ts`), share links in KV + the public viewer, server-rendered with no scripts (`share.ts`); routes in the `index.ts` header. `npm test`, `npm run check`, `npm run deploy`. |

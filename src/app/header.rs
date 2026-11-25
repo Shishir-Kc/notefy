@@ -128,6 +128,7 @@ impl Notefy {
         let mut read = false;
         let reading = self.reading();
         let mut pick_image = false;
+        let mut share = false;
         let mut table: Option<(usize, usize)> = None;
 
         ui.horizontal_centered(|ui| {
@@ -190,6 +191,11 @@ impl Notefy {
                             });
                         });
                         ui.separator();
+                        if ui.button(format!("{}  Share…", icon::SHARE)).clicked() {
+                            share = true;
+                            ui.close();
+                        }
+                        ui.separator();
                         if ui.button(format!("{}  Delete note", icon::TRASH)).clicked() {
                             delete = true;
                             ui.close();
@@ -233,6 +239,9 @@ impl Notefy {
         }
         if pick_image {
             self.insert_image(&ctx);
+        }
+        if share {
+            self.open_share();
         }
     }
 }

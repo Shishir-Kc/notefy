@@ -66,6 +66,23 @@ pub(crate) fn scan_dir(root: &Path, dir: &Path, notes: &mut Vec<Note>) -> Option
     Some(node)
 }
 
+/// Every file in the vault (notes and attachments), skipping hidden and `SKIP_DIRS` folders.
+pub(crate) fn vault_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out = vec![];
+    for e in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) {
+            continue;
+        }
+        match e.file_type() {
+            Ok(t) if t.is_dir() => out.extend(vault_files(&e.path())),
+            Ok(t) if t.is_file() => out.push(e.path()),
+            _ => {}
+        }
+    }
+    out
+}
+
 fn stem(p: &Path) -> String {
     p.file_stem()
         .unwrap_or_default()
@@ -253,6 +270,14 @@ mod tests {
         assert_eq!(proj.dirs[0].name, "Rust");
         assert_eq!(proj.files.len(), 1);
         assert_eq!(notes.len(), 4);
+        // cloud upload takes every non-hidden file, attachments included
+        let mut all: Vec<_> = vault_files(&v)
+            .iter()
+            .map(|p| p.strip_prefix(&v).unwrap().to_path_buf())
+            .collect();
+        all.sort();
+        assert_eq!(all.len(), 5);
+        assert!(all.contains(&PathBuf::from("Assets/pic.png")));
         fs::remove_dir_all(&v).unwrap();
     }
 

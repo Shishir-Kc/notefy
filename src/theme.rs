@@ -112,6 +112,11 @@ pub(crate) mod icon {
     pub const CLOCK: &str = "\u{ea82}";
     pub const IMAGE: &str = "\u{eaea}";
     pub const TABLE: &str = "\u{ebb7}";
+    pub const SHARE: &str = "\u{eb18}";
+    pub const LINK: &str = "\u{eb15}";
+    pub const COPY: &str = "\u{ebcc}";
+    pub const LOCK: &str = "\u{ea75}";
+    pub const GLOBE: &str = "\u{eb01}";
     /// GitHub Octicons "git-branch": the graph view.
     pub const GRAPH: &str = "\u{f418}";
 }

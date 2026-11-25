@@ -5,10 +5,17 @@ mod dialogs;
 mod editor;
 mod graph;
 mod header;
+mod share;
 mod sidebar;
 mod widgets;
 
-use crate::{config::*, semantic::Semantic, theme::*, vault::*};
+use crate::{
+    cloud::{Cloud, Job},
+    config::*,
+    semantic::Semantic,
+    theme::*,
+    vault::*,
+};
 use dialogs::SearchState;
 use eframe::egui::{self, Key, Margin, Stroke};
 use graph::Graph;
@@ -68,6 +75,10 @@ pub(crate) struct Notefy {
     /// Transient message for the status corner, and when it was set.
     status: String,
     status_at: Instant,
+    /// Cloud copy + share links (`None` = no `~/.config/notefy/cloud`).
+    cloud: Option<Cloud>,
+    /// Share dialog (`Some` = open).
+    share: Option<share::ShareDialog>,
 }
 
 /// One editor tab: the note it shows (`None` = empty "New tab") and its own history.
@@ -110,6 +121,14 @@ impl Notefy {
         apply_theme(&cc.egui_ctx);
         let mut app = Self::with_vault(vault);
         app.index_at = Some(Instant::now() + INDEX_DELAY);
+        let ctx = cc.egui_ctx.clone();
+        app.cloud = Cloud::from_config(move || ctx.request_repaint());
+        if let Some(cur) = app.current.clone() {
+            app.cloud(Job::Pull {
+                vault: app.vault.clone(),
+                path: cur,
+            });
+        }
         app
     }
 
@@ -155,6 +174,8 @@ impl Notefy {
             skip_delete_confirm: config_file("skip_delete_confirm").exists(),
             status: String::new(),
             status_at: Instant::now(),
+            cloud: None,
+            share: None,
         };
         app.refresh();
         if app.notes.is_empty() {
@@ -214,7 +235,10 @@ impl Notefy {
     pub(crate) fn save(&mut self) {
         if let (Some(p), true) = (&self.current, self.dirty) {
             match fs::write(p, &self.buffer) {
-                Ok(_) => self.dirty = false,
+                Ok(_) => {
+                    self.dirty = false;
+                    self.cloud_push(p);
+                }
                 Err(e) => self.flash(format!("Save failed: {e}")),
             }
         }
@@ -247,6 +271,11 @@ impl Notefy {
         };
         if let Some(p) = &path {
             self.expand_to(p);
+            // pick up edits made through an editable share link
+            self.cloud(Job::Pull {
+                vault: self.vault.clone(),
+                path: p.clone(),
+            });
         }
         self.tabs[self.active].path = path.clone();
         self.current = path;
@@ -435,6 +464,7 @@ impl Notefy {
                 match fs::rename(&old, &new) {
                     Ok(_) => {
                         self.remap_paths(|p| Some(rebase(p, &old, &new).unwrap_or(p.into())));
+                        self.cloud_moved(&old, &new);
                         self.refresh();
                     }
                     Err(e) => self.flash(format!("Rename failed: {e}")),
@@ -505,6 +535,10 @@ impl Notefy {
             self.buffer.clear();
         }
         self.remap_paths(|p| (p != path).then(|| p.to_path_buf()));
+        self.cloud(Job::Delete {
+            vault: self.vault.clone(),
+            path: path.to_path_buf(),
+        });
         self.title_edit = self.current_title();
         self.refresh();
         let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -524,6 +558,7 @@ impl Notefy {
         };
         // keep open notes, history, bookmarks and expanded folders pointing at the new place
         self.remap_paths(|p| Some(rebase(p, src, &dest).unwrap_or(p.into())));
+        self.cloud_moved(src, &dest);
         self.expanded = self
             .expanded
             .iter()
@@ -534,6 +569,24 @@ impl Notefy {
         self.refresh();
         let name = dest.file_name().unwrap_or_default().to_string_lossy();
         self.flash(format!("Moved {name}"));
+    }
+
+    /// Mirror a rename/move of a file or folder in the cloud: upload the new paths, delete the old.
+    fn cloud_moved(&self, old: &Path, new: &Path) {
+        let files = if new.is_dir() {
+            vault_files(new)
+        } else {
+            vec![new.to_path_buf()]
+        };
+        for f in files {
+            self.cloud_push(&f);
+            if let Some(o) = rebase(&f, new, old) {
+                self.cloud(Job::Delete {
+                    vault: self.vault.clone(),
+                    path: o,
+                });
+            }
+        }
     }
 
     pub(crate) fn toggle_search(&mut self) {
@@ -668,6 +721,7 @@ impl eframe::App for Notefy {
         let ctx = ui.ctx().clone();
         let p = self.pal();
         self.shortcuts(&ctx);
+        self.cloud_events(&ctx);
 
         // load the model only once the window is up (a search before that starts it anyway)
         if let Some(at) = self.index_at {
@@ -733,6 +787,7 @@ impl eframe::App for Notefy {
         self.delete_dialog(&ctx);
         self.new_folder_dialog(&ctx);
         self.search_popup(&ctx);
+        self.share_dialog(&ctx);
     }
 
     fn on_exit(&mut self) {

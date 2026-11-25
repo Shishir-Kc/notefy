@@ -2613,6 +2613,8 @@ dependencies = [
  "eframe",
  "fastembed",
  "rfd",
+ "serde_json",
+ "ureq",
 ]
 
 [[package]]

@@ -2,6 +2,7 @@
 //! See AGENTS.md for the module map.
 
 mod app;
+mod cloud;
 mod config;
 mod live;
 mod semantic;
