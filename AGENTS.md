@@ -8,6 +8,7 @@ a "vault" folder.
 
 ```sh
 cargo run -- ~/notes   # run against a folder (default: last used, else ~/Notefy; a CLI path is not remembered)
+dev/share-local.sh     # sharing test: local B2 mock + Worker + Notefy (vault dev/vault, bucket files in dev/.local-b2)
 cargo test             # unit tests (pure logic: parsing, scanning, search)
 cargo fmt              # always format before committing
 cargo clippy           # keep it warning-free
